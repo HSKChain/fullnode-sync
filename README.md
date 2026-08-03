@@ -125,6 +125,23 @@ should return something like:
 docker compose down
 ```
 
+### Hardfork / config upgrade
+
+When the network upgrades and `genesis.json` / `rollup.json` change:
+
+1. Update `GETH_IMAGE`, `NODE_IMAGE`, and config URLs in `.env` if needed.
+2. Pull new images yourself if the tags changed:
+   ```sh
+   docker compose --env-file .env pull
+   ```
+3. Run the upgrade helper (deletes cached configs and restarts; does **not** wipe chain data):
+   ```sh
+   chmod +x ./upgrade.sh   # first time only
+   ./upgrade.sh
+   ```
+
+The script removes `/data/genesis.json` and `/data/rollup.json` from the service volumes, then restarts. Entrypoints will re-download the configs and re-run `geth init` so fork schedule updates are written into the local chain config.
+
 ### Reference
 
 - <https://docs.optimism.io/builders/node-operators/tutorials/node-from-docker>
