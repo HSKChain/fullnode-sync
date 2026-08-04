@@ -129,7 +129,11 @@ docker compose down
 
 When the network upgrades and `genesis.json` / `rollup.json` change:
 
-1. Update `GETH_IMAGE`, `NODE_IMAGE`, and config URLs in `.env` if needed.
+1. Update images and config URLs in `.env` if needed. **Before running `upgrade.sh`, `NODE_IMAGE` must be set to:**
+   ```sh
+   NODE_IMAGE=public.ecr.aws/x7e7q5l8/op-node:v1.16.5
+   ```
+   Also update `GETH_IMAGE` when a new op-geth version is required.
 2. Pull new images yourself if the tags changed:
    ```sh
    docker compose --env-file .env pull
