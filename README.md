@@ -146,6 +146,8 @@ When the network upgrades and `genesis.json` / `rollup.json` change:
 
 The script removes `/data/genesis.json` and `/data/rollup.json` from the service volumes, then restarts. Entrypoints will re-download the configs and re-run `geth init` so fork schedule updates are written into the local chain config.
 
+`op-geth` is started with `--rollup.superchain-upgrades=false` so hardfork timestamps come from `genesis.json` instead of the embedded Superchain registry (no `--override.*` needed for that path).
+
 ### Reference
 
 - <https://docs.optimism.io/builders/node-operators/tutorials/node-from-docker>

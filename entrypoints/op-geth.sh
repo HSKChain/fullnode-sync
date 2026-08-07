@@ -19,11 +19,15 @@ EOF
 echo "geth p2p bootnodes:"
 cat /data/config.toml
 
+# Disable embedded Superchain upgrade schedule so fork times from genesis.json
+# are applied as-is (needed for HashKey and other non-registry custom chains).
+SUPERCHAIN_UPGRADES_FLAG="--rollup.superchain-upgrades=false"
+
 # do geth init if datadir is empty
 if [ ! -d "/data/geth" ]; then
   echo "Initializing geth datadir"
   wget -O /data/genesis.json $GENESIS_URL
-  geth init --state.scheme=hash --datadir=/data /data/genesis.json
+  geth init $SUPERCHAIN_UPGRADES_FLAG --state.scheme=hash --datadir=/data /data/genesis.json
 else
   echo "geth datadir already initialized, skipping..."
 fi
@@ -31,11 +35,12 @@ fi
 if [ ! -f "/data/genesis.json" ]; then
   echo "Downloading genesis.json"
   wget -O /data/genesis.json $GENESIS_URL
-  geth init --state.scheme=hash --datadir=/data /data/genesis.json
+  geth init $SUPERCHAIN_UPGRADES_FLAG --state.scheme=hash --datadir=/data /data/genesis.json
 fi
 
 exec geth \
   --datadir=/data \
+  $SUPERCHAIN_UPGRADES_FLAG \
   --rollup.disabletxpoolgossip=true \
   --rollup.sequencerhttp=$SEQUENCER_HTTP \
   --http \
