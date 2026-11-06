@@ -22,11 +22,23 @@ fi
 
 mkdir -p config
 
-echo "Downloading genesis.json from $GENESIS_URL"
-curl -fsSL -o config/genesis.json "$GENESIS_URL"
+# Download to local /tmp first, then move into place.
+# Direct -o into cloud-synced dirs (e.g. ~/cloud/...) often fails with:
+#   curl: (23) client returned ERROR on write of ...
+download_to() {
+  url="$1"
+  dest="$2"
+  tmp=$(mktemp "${TMPDIR:-/tmp}/fullnode-sync.XXXXXX")
+  # shellcheck disable=SC2064
+  trap 'rm -f "$tmp"' EXIT
+  echo "Downloading $(basename "$dest") from $url"
+  curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 -o "$tmp" "$url"
+  mv -f "$tmp" "$dest"
+  trap - EXIT
+}
 
-echo "Downloading rollup.json from $ROLLUP_CONFIG_URL"
-curl -fsSL -o config/rollup.json "$ROLLUP_CONFIG_URL"
+download_to "$GENESIS_URL" config/genesis.json
+download_to "$ROLLUP_CONFIG_URL" config/rollup.json
 
 echo "Configs ready:"
 ls -lh config/genesis.json config/rollup.json
