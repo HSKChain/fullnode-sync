@@ -1,36 +1,40 @@
 volumes:
-  geth:
+  reth:
   node:
 
 services:
-  geth:
-    image: ${GETH_IMAGE}
+  reth:
+    image: ${RETH_IMAGE}
+    restart: unless-stopped
     ports:
-      # geth http rpc
+      # reth http rpc
       - "8545:8545"
-      # geth ws rpc
+      # reth ws rpc
       - "8546:8546"
-      # geth eignine authrpc
+      # reth engine authrpc
       - "8551:8551"
-      # geth metrics
-      - "6060:6060"
-      # geth p2p port
+      # reth metrics
+      - "9001:9001"
+      # reth p2p
       - "30303:30303"
+      - "30303:30303/udp"
     env_file:
       - .env
     volumes:
-      - "geth:/data"
+      - "reth:/data"
       - "./jwt:/jwt"
-      - "./entrypoints/op-geth.sh:/entrypoints/op-geth.sh"
+      - "./config:/config:ro"
+      - "./entrypoints/op-reth.sh:/entrypoints/op-reth.sh"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        exec /entrypoints/op-geth.sh
+        exec /entrypoints/op-reth.sh
 
   node:
     depends_on:
-      - geth
+      - reth
     image: ${NODE_IMAGE}
+    restart: unless-stopped
     ports:
       # node rpc
       - "9545:9545"
@@ -43,10 +47,11 @@ services:
     volumes:
       - "node:/data"
       - "./jwt:/jwt"
+      - "./config:/config:ro"
       - "./entrypoints/op-node.sh:/entrypoints/op-node.sh"
     entrypoint: ["/bin/sh", "-c"]
     links:
-      - "geth:geth"
+      - "reth:reth"
     command:
       - |
         exec /entrypoints/op-node.sh

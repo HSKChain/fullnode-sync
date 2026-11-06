@@ -1,4 +1,6 @@
 jwt/jwt.txt
 .env
 tmp
+config/genesis.json
+config/rollup.json
 

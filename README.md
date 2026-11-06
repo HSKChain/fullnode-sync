@@ -1,12 +1,14 @@
 # HashkeyChain Fullnode Synchronization Guide
 
-A simple docker compose script for launching full node for Hashkey Chain.
+A simple docker compose script for launching a HashKey Chain full node with **op-reth** + **op-node**.
+
+> op-geth has reached end-of-support and is no longer used by this repository.
 
 ## Recommended Hardware
 
 - 4 Core
 - 16 GB+ RAM
-- 1TB SSD (NVME Recommended)
+- 500GB+ SSD for full (pruned) node / 1TB+ SSD for archive (NVME Recommended)
 - 100 MB/s+ Download
 
 ## Prepare
@@ -17,16 +19,39 @@ A simple docker compose script for launching full node for Hashkey Chain.
 openssl rand -hex 32 > ./jwt/jwt.txt
 ```
 
-### Copy .env.example to .env and update the value
+### Copy env example to `.env` and update values
 
-Make a copy of `.env.example.testnet` named `.env`.
+Testnet:
 
 ```sh
 cp .env.example.testnet .env
-# modify .env to your parameters.
+```
+
+Mainnet:
+
+```sh
+cp .env.example.mainnet .env
+```
+
+Then fill in `L1_RPC` and `L1_BEACON`.
+
+### Fetch genesis / rollup configs
+
+op-reth and op-node images are minimal and do not ship download tools, so configs are fetched on the host:
+
+```sh
+chmod +x ./fetch-config.sh
+./fetch-config.sh
 ```
 
 Or, our team will provide one `.env` file for your rollup directly.
+
+Key knobs:
+
+- `RETH_IMAGE` / `NODE_IMAGE` — execution and consensus client images
+- `RETH_MODE=full|archive` — `full` enables `--full` (pruned); `archive` keeps full history
+- `RETH_TRUSTED_PEERS` — comma-separated enode URLs
+- `GENESIS_URL` / `ROLLUP_CONFIG_URL` — chain config downloads
 
 ## Operating the Node
 
@@ -38,16 +63,16 @@ docker compose --env-file .env up -d
 
 ### View logs
 
-logs for op node
+op-node:
 
 ```sh
 docker compose logs -f node
 ```
 
-logs for op geth
+op-reth:
 
 ```sh
-docker compose logs -f geth
+docker compose logs -f reth
 ```
 
 ### Sanity Test
@@ -60,38 +85,12 @@ curl --location 'localhost:8545' \
 --data '{
   "jsonrpc": "2.0",
   "method": "eth_syncing",
-  "param": [],
+  "params": [],
   "id": 2
 }'
 ```
 
-if the node is still syncing, you would see:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 2,
-  "result": {
-    "currentBlock": "0x7d0f5",
-    "healedBytecodeBytes": "0x0",
-    "healedBytecodes": "0x0",
-    "healedTrienodeBytes": "0x9d12b",
-    "healedTrienodes": "0x1197",
-    "healingBytecode": "0x0",
-    "healingTrienodes": "0x0",
-    "highestBlock": "0xd8674",
-    "startingBlock": "0x6a58f",
-    "syncedAccountBytes": "0xb1801",
-    "syncedAccounts": "0x9c1",
-    "syncedBytecodeBytes": "0x51375",
-    "syncedBytecodes": "0x34",
-    "syncedStorage": "0x2b24",
-    "syncedStorageBytes": "0x225f7a"
-  }
-}
-```
-
-or the syncing has completed:
+If the node is still syncing you will see sync progress fields; when caught up:
 
 ```json
 {"jsonrpc":"2.0","id":2,"result":false}
@@ -109,16 +108,6 @@ curl --location 'localhost:8545' \
 }'
 ```
 
-should return something like:
-
-```sh
-{
-    "jsonrpc": "2.0",
-    "id": 2,
-    "result": "0x2139"
-}
-```
-
 ### Stop
 
 ```sh
@@ -129,12 +118,12 @@ docker compose down
 
 When the network upgrades and `genesis.json` / `rollup.json` change:
 
-1. Update images and config URLs in `.env` if needed. **Before running `upgrade.sh`, `NODE_IMAGE` must be set to:**
+1. Update `RETH_IMAGE`, `NODE_IMAGE`, and config URLs in `.env` if needed. Current recommended images:
    ```sh
-   NODE_IMAGE=public.ecr.aws/x7e7q5l8/op-node:v1.16.5
+   RETH_IMAGE=us-docker.pkg.dev/oplabs-tools-artifacts/images/op-reth:v2.8.1
+   NODE_IMAGE=us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.19.11
    ```
-   Also update `GETH_IMAGE` when a new op-geth version is required.
-2. Pull new images yourself if the tags changed:
+2. Pull new images if the tags changed:
    ```sh
    docker compose --env-file .env pull
    ```
@@ -144,10 +133,35 @@ When the network upgrades and `genesis.json` / `rollup.json` change:
    ./upgrade.sh
    ```
 
-The script removes `/data/genesis.json` and `/data/rollup.json` from the service volumes, then restarts. Entrypoints will re-download the configs and re-run `geth init` so fork schedule updates are written into the local chain config.
+The script re-runs `./fetch-config.sh` and restarts. Entrypoints copy `./config/*.json` into the service datadirs. Unlike op-geth, op-reth does not need a separate `init` step — it loads `--chain` from genesis on startup.
 
-`op-geth` is started with `--rollup.superchain-upgrades=false` so hardfork timestamps come from `genesis.json` instead of the embedded Superchain registry (no `--override.*` needed for that path).
+### Syncing from a Snapshot
+
+Official archive snapshots (op-reth):
+
+```sh
+# Mainnet
+curl -fL -o mainnet-reth-archive-chaindata.tar.zst \
+  "$(curl -fsSL https://snapshot.hashkeychain.net/mainnet/reth/latest.txt)"
+
+# Testnet
+curl -fL -o testnet-reth-archive-chaindata.tar.zst \
+  "$(curl -fsSL https://snapshot.hashkeychain.net/testnet/reth/latest.txt)"
+```
+
+Stop the stack, extract into the `reth` data directory (inspect the archive layout first), set `RETH_MODE=archive` if using an archive snapshot, then `docker compose up -d`.
+
+### Migrating from op-geth
+
+op-geth datadir is **not** compatible with op-reth. Start a fresh `reth` volume (or restore an op-reth snapshot). Old `geth` compose volumes can be removed after cutover:
+
+```sh
+docker compose --env-file .env down
+docker volume ls | grep -E 'geth|reth'
+# remove obsolete geth volume only after you no longer need it
+```
 
 ### Reference
 
-- <https://docs.optimism.io/builders/node-operators/tutorials/node-from-docker>
+- <https://docs.optimism.io/operators/node-operators/tutorials/node-from-docker>
+- <https://docs.hskchain.net/docs/Build-on-HashKey-Chain/RPC-Node-Provider>

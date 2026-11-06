@@ -24,19 +24,20 @@ if [ -n "$PLASMA_DA_SERVER" ] && [ ! -n "$ALTDA_DA_SERVER" ]; then
 fi
 echo "OP_NODE_ALTDA_DA_SERVER: $OP_NODE_ALTDA_DA_SERVER"
 
-until nc -z -w 5 geth 8551; do
-  echo "Waiting for geth ..."
-  sleep 5
-done
-echo "geth is up"
-
-if [ ! -f "/data/rollup.json" ]; then
-  wget -O /data/rollup.json $ROLLUP_CONFIG_URL
+if [ ! -f /config/rollup.json ]; then
+  echo "error: /config/rollup.json missing. Run ./fetch-config.sh on the host first."
+  exit 1
 fi
+
+cp /config/rollup.json /data/rollup.json
 
 mkdir -p /data/opnode_discovery_db
 mkdir -p /data/opnode_peerstore_db
 mkdir -p /data/safedb
+
+# op-node retries engine dials; give reth a short head start.
+echo "Waiting briefly for reth engine..."
+sleep 5
 
 exec op-node \
   --safedb.path=/data/safedb \
@@ -45,8 +46,9 @@ exec op-node \
   --l1=$L1_RPC \
   --l1.beacon=$L1_BEACON \
   --l1.trustrpc \
-  --l2=http://geth:8551 \
+  --l2=http://reth:8551 \
   --l2.jwt-secret=/jwt/jwt.txt \
+  --l2.enginekind=reth \
   --metrics.enabled \
   --metrics.port=7300 \
   --metrics.addr="0.0.0.0" \
@@ -57,5 +59,4 @@ exec op-node \
   --p2p.listen.udp=9003 \
   --p2p.discovery.path=/data/opnode_discovery_db \
   --p2p.peerstore.path=/data/opnode_peerstore_db \
-  --p2p.priv.path=/data/opnode_p2p_priv.txt \
-
+  --p2p.priv.path=/data/opnode_p2p_priv.txt
